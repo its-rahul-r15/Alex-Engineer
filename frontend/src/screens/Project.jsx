@@ -40,6 +40,8 @@ const Project = () => {
     const [runProcess, setRunProcess] = useState(null)
     const [isRunning, setIsRunning] = useState(false)
     const [terminalOutput, setTerminalOutput] = useState([])
+    const previewRef = useRef(null)
+    const [isPreviewFullscreen, setIsPreviewFullscreen] = useState(false)
 
     const handleUserClick = (id) => {
         setSelectedUserId(prev => {
@@ -267,6 +269,16 @@ const Project = () => {
         scrollToBottom()
     }, [messages])
 
+    // Track fullscreen state for preview panel
+    useEffect(() => {
+        const onFullScreenChange = () => {
+            const el = previewRef.current
+            setIsPreviewFullscreen(Boolean(document.fullscreenElement && document.fullscreenElement === el))
+        }
+        document.addEventListener('fullscreenchange', onFullScreenChange)
+        return () => document.removeEventListener('fullscreenchange', onFullScreenChange)
+    }, [])
+
     const runProject = async () => {
         if (!webContainer) {
             alert('WebContainer is still initializing. Please wait...')
@@ -347,6 +359,23 @@ const Project = () => {
             setIsRunning(false)
             setIframeUrl(null)
             setTerminalOutput(prev => [...prev, '✓ Server stopped'])
+        }
+    }
+
+    const togglePreviewFullscreen = async () => {
+        const el = previewRef.current
+        if (!el) return
+        try {
+            if (document.fullscreenElement && document.fullscreenElement === el) {
+                await document.exitFullscreen()
+            } else {
+                // Request fullscreen on the preview container
+                if (el.requestFullscreen) await el.requestFullscreen()
+                else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen()
+                else if (el.msRequestFullscreen) el.msRequestFullscreen()
+            }
+        } catch (err) {
+            console.error('Fullscreen toggle failed:', err)
         }
     }
 
@@ -627,22 +656,31 @@ const Project = () => {
                 {/* Preview Panel */}
                 {iframeUrl && webContainer && (
                     <div className="flex flex-col h-full w-96 min-w-96 bg-gray-800 border-l border-gray-700">
-                        <div className="address-bar bg-gray-700 border-b border-gray-600 p-3">
-                            <div className="flex items-center gap-2 bg-gray-600 rounded-lg px-3 py-2 border border-gray-500">
-                                <i className="ri-window-fill text-gray-400"></i>
-                                <input
-                                    type="text"
-                                    onChange={(e) => setIframeUrl(e.target.value)}
-                                    value={iframeUrl}
-                                    className="w-full bg-transparent border-none outline-none text-sm text-gray-200"
-                                />
+                        <div ref={previewRef} className="flex flex-col h-full w-96 min-w-96 bg-gray-800 border-l border-gray-700">
+                            <div className="address-bar bg-gray-700 border-b border-gray-600 p-3 flex items-center gap-2">
+                                <div className="flex items-center gap-2 bg-gray-600 rounded-lg px-3 py-2 border border-gray-500 flex-1">
+                                    <i className="ri-window-fill text-gray-400"></i>
+                                    <input
+                                        type="text"
+                                        onChange={(e) => setIframeUrl(e.target.value)}
+                                        value={iframeUrl}
+                                        className="w-full bg-transparent border-none outline-none text-sm text-gray-200"
+                                    />
+                                </div>
+                                <button
+                                    onClick={togglePreviewFullscreen}
+                                    aria-label={isPreviewFullscreen ? 'Exit fullscreen' : 'Open preview fullscreen'}
+                                    className="ml-2 p-2 bg-gray-600 rounded text-gray-200 hover:bg-gray-500"
+                                >
+                                    <i className={isPreviewFullscreen ? 'ri-fullscreen-exit-line' : 'ri-fullscreen-line'}></i>
+                                </button>
                             </div>
+                            <iframe
+                                src={iframeUrl}
+                                className="w-full h-full bg-white"
+                                title="Project Preview"
+                            />
                         </div>
-                        <iframe
-                            src={iframeUrl}
-                            className="w-full h-full bg-white"
-                            title="Project Preview"
-                        />
                     </div>
                 )}
             </section>
