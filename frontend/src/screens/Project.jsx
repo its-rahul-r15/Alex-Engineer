@@ -4,6 +4,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import axios from '../config/axios'
 import Markdown from 'markdown-to-jsx'
 import hljs from 'highlight.js';
+import 'highlight.js/styles/github-dark.css';
 import { getWebContainer } from '../config/webContainer.js'
 import { initializeSocket, sendMessage } from '../config/socket.js'
 
@@ -20,15 +21,257 @@ function SyntaxHighlightedCode(props) {
     return <code {...props} ref={ref} />
 }
 
+// File Content Display Component
+const FileContentDisplay = ({ fileTree, currentFile, onContentUpdate }) => {
+    const [content, setContent] = useState('')
+    const textareaRef = useRef(null)
+    const preRef = useRef(null)
+
+    // Get file content in consistent way
+    const getFileContent = () => {
+        if (!fileTree || !currentFile || !fileTree[currentFile]) return ''
+
+        const fileData = fileTree[currentFile]
+
+        // Handle different file formats
+        if (fileData.file && fileData.file.contents) {
+            return fileData.file.contents
+        } else if (fileData.contents) {
+            return fileData.contents
+        } else if (typeof fileData === 'string') {
+            return fileData
+        }
+
+        return ''
+    }
+
+    // Detect language for syntax highlighting
+    const detectLanguage = (fileName) => {
+        if (!fileName) return 'plaintext'
+
+        const ext = fileName.split('.').pop()?.toLowerCase()
+        const languageMap = {
+            'js': 'javascript',
+            'jsx': 'javascript',
+            'ts': 'typescript',
+            'tsx': 'typescript',
+            'html': 'html',
+            'css': 'css',
+            'json': 'json',
+            'md': 'markdown',
+            'py': 'python',
+            'java': 'java',
+            'cpp': 'cpp',
+            'c': 'c',
+            'php': 'php',
+            'rb': 'ruby',
+            'xml': 'xml',
+            'yaml': 'yaml',
+            'yml': 'yaml'
+        }
+
+        return languageMap[ext] || 'plaintext'
+    }
+
+    // Apply syntax highlighting
+    const applySyntaxHighlighting = (content, language) => {
+        try {
+            if (language === 'plaintext') {
+                return hljs.highlightAuto(content).value
+            }
+            return hljs.highlight(content, { language }).value
+        } catch (error) {
+            console.warn('Syntax highlighting failed:', error)
+            return hljs.highlightAuto(content).value
+        }
+    }
+
+    useEffect(() => {
+        const fileContent = getFileContent()
+        setContent(fileContent)
+
+        // Apply syntax highlighting after content is set
+        if (preRef.current && fileContent) {
+            const language = detectLanguage(currentFile)
+            preRef.current.innerHTML = applySyntaxHighlighting(fileContent, language)
+        }
+    }, [currentFile, fileTree])
+
+    const handleContentChange = (e) => {
+        const newContent = e.target.value
+        setContent(newContent)
+
+        if (onContentUpdate) {
+            onContentUpdate(newContent)
+        }
+    }
+
+    const handleKeyDown = (e) => {
+        // Tab key support
+        if (e.key === 'Tab') {
+            e.preventDefault()
+            const start = e.target.selectionStart
+            const end = e.target.selectionEnd
+
+            // Insert tab character
+            const newContent = content.substring(0, start) + '  ' + content.substring(end)
+            setContent(newContent)
+
+            // Set cursor position after tab
+            setTimeout(() => {
+                e.target.selectionStart = e.target.selectionEnd = start + 2
+            }, 0)
+
+            if (onContentUpdate) {
+                onContentUpdate(newContent)
+            }
+        }
+    }
+
+    if (!currentFile || !fileTree[currentFile]) {
+        return (
+            <div className="h-full flex-1 flex items-center justify-center text-gray-500 bg-gray-900">
+                <div className="text-center">
+                    <i className="ri-file-code-line text-6xl mb-4 text-gray-600"></i>
+                    <p className="text-lg text-gray-400">Select a file to start editing</p>
+                </div>
+            </div>
+        )
+    }
+
+    const language = detectLanguage(currentFile)
+    const isEditable = !['png', 'jpg', 'jpeg', 'gif', 'svg', 'ico'].includes(currentFile.split('.').pop()?.toLowerCase())
+
+    // Safe file icon getter function
+    const getFileIcon = (fileName) => {
+        if (!fileName || typeof fileName !== 'string') return 'ri-file-text-fill';
+
+        const ext = fileName.split('.').pop()?.toLowerCase()
+        const iconMap = {
+            'js': 'ri-file-js-fill',
+            'jsx': 'ri-file-js-fill',
+            'ts': 'ri-file-code-fill',
+            'tsx': 'ri-file-code-fill',
+            'html': 'ri-file-html-fill',
+            'css': 'ri-file-css-fill',
+            'json': 'ri-file-code-fill',
+            'md': 'ri-markdown-fill',
+            'txt': 'ri-file-text-fill',
+            'py': 'ri-file-code-fill',
+            'java': 'ri-file-code-fill',
+            'cpp': 'ri-file-code-fill',
+            'c': 'ri-file-code-fill',
+            'php': 'ri-file-code-fill',
+            'rb': 'ri-file-code-fill',
+            'xml': 'ri-file-code-fill',
+            'yaml': 'ri-file-code-fill',
+            'yml': 'ri-file-code-fill',
+            'png': 'ri-image-fill',
+            'jpg': 'ri-image-fill',
+            'jpeg': 'ri-image-fill',
+            'gif': 'ri-image-fill',
+            'svg': 'ri-image-fill',
+            'ico': 'ri-image-fill'
+        }
+
+        return iconMap[ext] || 'ri-file-text-fill'
+    }
+
+    const getFileIconColor = (fileName) => {
+        if (!fileName || typeof fileName !== 'string') return 'text-gray-400';
+
+        const ext = fileName.split('.').pop()?.toLowerCase()
+        const colorMap = {
+            'js': 'text-yellow-400',
+            'jsx': 'text-yellow-400',
+            'ts': 'text-blue-400',
+            'tsx': 'text-blue-400',
+            'html': 'text-orange-500',
+            'css': 'text-blue-400',
+            'json': 'text-yellow-300',
+            'md': 'text-blue-300',
+            'py': 'text-green-400',
+            'java': 'text-red-400',
+            'cpp': 'text-pink-400',
+            'c': 'text-pink-400',
+            'php': 'text-purple-400',
+            'png': 'text-green-300',
+            'jpg': 'text-green-300',
+            'jpeg': 'text-green-300',
+            'gif': 'text-green-300',
+            'svg': 'text-orange-300'
+        }
+
+        return colorMap[ext] || 'text-gray-400'
+    }
+
+    return (
+        <div className="code-editor-area h-full flex-1 overflow-hidden bg-gray-900 flex flex-col">
+            {/* File Header */}
+            <div className="file-header bg-gray-800 border-b border-gray-700 px-6 py-3 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                    <i className={`${getFileIcon(currentFile)} ${getFileIconColor(currentFile)} text-lg`}></i>
+                    <span className="text-gray-200 font-medium text-sm">{currentFile}</span>
+                    <span className="px-2 py-1 bg-gray-700 rounded text-xs text-gray-400 uppercase">
+                        {language}
+                    </span>
+                </div>
+                <div className="text-xs text-gray-500">
+                    {content.length} characters
+                </div>
+            </div>
+
+            {/* Code Editor */}
+            <div className="editor-container flex-1 overflow-auto relative">
+                {isEditable ? (
+                    // Editable files - Use textarea for better editing
+                    <div className="h-full relative">
+                        <textarea
+                            ref={textareaRef}
+                            value={content}
+                            onChange={handleContentChange}
+                            onKeyDown={handleKeyDown}
+                            className="w-full h-full bg-gray-900 text-gray-200 font-mono text-sm p-6 outline-none resize-none border-none absolute inset-0"
+                            style={{
+                                lineHeight: '1.5',
+                                tabSize: 2
+                            }}
+                            spellCheck="false"
+                        />
+
+                        {/* Syntax highlighted overlay for display only */}
+                        <pre
+                            ref={preRef}
+                            className="h-full p-6 pointer-events-none overflow-auto bg-transparent font-mono text-sm leading-relaxed"
+                            style={{
+                                whiteSpace: 'pre-wrap',
+                                wordWrap: 'break-word'
+                            }}
+                        />
+                    </div>
+                ) : (
+                    // Non-editable files (images, etc.)
+                    <div className="h-full flex items-center justify-center p-8">
+                        <div className="text-center text-gray-500">
+                            <i className="ri-file-warning-line text-4xl mb-4"></i>
+                            <p>This file type cannot be edited in the text editor</p>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    )
+}
+
 const Project = () => {
     const location = useLocation()
     const [isSidePanelOpen, setIsSidePanelOpen] = useState(false)
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [selectedUserId, setSelectedUserId] = useState(new Set())
-    const [project, setProject] = useState(location.state.project[0])
+    const [project, setProject] = useState(location.state?.project?.[0] || {})
     const [message, setMessage] = useState('')
     const { user } = useContext(UserContext)
-    const messageBox = React.createRef()
+    const messageBox = useRef(null)
 
     const [users, setUsers] = useState([])
     const [messages, setMessages] = useState([])
@@ -42,6 +285,11 @@ const Project = () => {
     const [terminalOutput, setTerminalOutput] = useState([])
     const previewRef = useRef(null)
     const [isPreviewFullscreen, setIsPreviewFullscreen] = useState(false)
+    const [isDeployModalOpen, setIsDeployModalOpen] = useState(false)
+    const [isDeploying, setIsDeploying] = useState(false)
+    const [deploymentUrl, setDeploymentUrl] = useState('')
+    const [deploymentStatus, setDeploymentStatus] = useState('')
+    const [deploymentId, setDeploymentId] = useState(null)
 
     const handleUserClick = (id) => {
         setSelectedUserId(prev => {
@@ -68,20 +316,86 @@ const Project = () => {
         }
     }
 
+    const handleDeploy = async () => {
+        if (!project?._id || Object.keys(fileTree).length === 0) {
+            alert('No files to deploy. Please add files to your project first.')
+            return
+        }
+
+        try {
+            setIsDeploying(true)
+            setDeploymentStatus('Preparing deployment...')
+            setIsDeployModalOpen(true)
+
+            const response = await axios.post('/deploy/start', {
+                projectId: project._id,
+                projectName: project.name || 'my-project'
+            })
+
+            if (response.data.success) {
+                setDeploymentId(response.data.deployment._id)
+                setDeploymentUrl(response.data.deployment.deploymentUrl)
+                setDeploymentStatus('Deploying to Vercel...')
+
+                // Start polling for deployment status
+                checkDeploymentStatus(response.data.deployment._id)
+            }
+        } catch (error) {
+            console.error('Deployment error:', error)
+            setDeploymentStatus(`Error: ${error.response?.data?.error || error.message}`)
+            setIsDeploying(false)
+        }
+    }
+
+
+    const checkDeploymentStatus = async (deplId) => {
+        try {
+            const response = await axios.get(`/deploy/status/${deplId}`)
+            const deployment = response.data.deployment
+
+            setDeploymentStatus(deployment.status)
+
+            if (deployment.status === 'ready') {
+                setIsDeploying(false)
+                setDeploymentUrl(deployment.deploymentUrl)
+                setDeploymentStatus('Deployment successful! 🎉')
+            } else if (deployment.status === 'error') {
+                setIsDeploying(false)
+                setDeploymentStatus(`Deployment failed: ${deployment.errorMessage || 'Unknown error'}`)
+            } else if (deployment.status === 'deploying') {
+                // Poll again after 3 seconds
+                setTimeout(() => checkDeploymentStatus(deplId), 3000)
+            }
+        } catch (error) {
+            console.error('Error checking deployment status:', error)
+            setIsDeploying(false)
+            setDeploymentStatus('Error checking deployment status')
+        }
+    }
+
+
     function WriteAiMessage(message) {
-        const messageObject = JSON.parse(message)
-        return (
-            <div className='overflow-auto bg-gradient-to-r from-gray-800 to-gray-900 text-gray-200 rounded-lg p-3 border border-gray-700'>
-                <Markdown
-                    children={messageObject.text}
-                    options={{
-                        overrides: {
-                            code: SyntaxHighlightedCode,
-                        },
-                    }}
-                />
-            </div>
-        )
+        try {
+            const messageObject = JSON.parse(message)
+            return (
+                <div className='overflow-auto bg-gradient-to-r from-gray-800 to-gray-900 text-gray-200 rounded-lg p-3 border border-gray-700'>
+                    <Markdown
+                        children={messageObject.text}
+                        options={{
+                            overrides: {
+                                code: SyntaxHighlightedCode,
+                            },
+                        }}
+                    />
+                </div>
+            )
+        } catch (err) {
+            return (
+                <div className='overflow-auto bg-gradient-to-r from-gray-800 to-gray-900 text-gray-200 rounded-lg p-3 border border-gray-700'>
+                    <p>{message}</p>
+                </div>
+            )
+        }
     }
 
     // -------------------------
@@ -125,6 +439,8 @@ const Project = () => {
     // -------------------------
     useEffect(() => {
         const projectId = location?.state?.project?.[0]?._id;
+        if (!projectId) return;
+
         const socket = initializeSocket(projectId);
 
         const handleMessage = (data) => {
@@ -158,7 +474,7 @@ const Project = () => {
             socket.off("project-message", handleMessage);
             socket.disconnect();
         };
-    }, [webContainer]);
+    }, [webContainer, location?.state?.project?.[0]?._id]);
 
     function addCollaborators() {
         axios.put("/projects/add-user", {
@@ -232,11 +548,11 @@ const Project = () => {
     // Convert flat fileTree to WebContainer nested format
     function convertToWebContainerFormat(flatTree) {
         const result = {}
-        
+
         Object.entries(flatTree).forEach(([path, fileObj]) => {
             const parts = path.split('/')
             let current = result
-            
+
             // Navigate/create nested structure for directories
             for (let i = 0; i < parts.length - 1; i++) {
                 const dirName = parts[i]
@@ -246,7 +562,7 @@ const Project = () => {
                 // Move into the directory object
                 current = current[dirName].directory
             }
-            
+
             // Add the file at the correct level
             const fileName = parts[parts.length - 1]
             if (fileObj && fileObj.file && fileObj.file.contents) {
@@ -260,7 +576,7 @@ const Project = () => {
                 current[fileName] = fileObj
             }
         })
-        
+
         console.log('Converted fileTree:', result)
         return result
     }
@@ -288,23 +604,23 @@ const Project = () => {
             alert('No files in project. Please add files from AI or upload files first.')
             return
         }
-        
+
         try {
             setIsRunning(true)
             setTerminalOutput(prev => [...prev, '$ npm install && npm run dev', 'Starting installation...'])
-            
+
             console.log('Original fileTree sample:', Object.entries(fileTree).slice(0, 2).map(([k, v]) => [k, v]))
             const convertedTree = convertToWebContainerFormat(fileTree)
             console.log('Converted fileTree sample:', Object.entries(convertedTree).slice(0, 2).map(([k, v]) => [k, v]))
             console.log('Full converted tree:', convertedTree)
-            
+
             await webContainer.mount(convertedTree)
             console.log('Files mounted successfully!')
             setTerminalOutput(prev => [...prev, '✓ Files mounted successfully!'])
-            
+
             console.log('Installing dependencies...')
             setTerminalOutput(prev => [...prev, 'Installing dependencies...'])
-            
+
             const installProcess = await webContainer.spawn("npm", ["install"])
             installProcess.output.pipeTo(new WritableStream({
                 write(chunk) {
@@ -312,7 +628,7 @@ const Project = () => {
                     setTerminalOutput(prev => [...prev, chunk])
                 }
             }))
-            
+
             const installExitCode = await installProcess.exit
             if (installExitCode !== 0) {
                 setTerminalOutput(prev => [...prev, '❌ Installation failed!'])
@@ -320,14 +636,14 @@ const Project = () => {
                 setIsRunning(false)
                 return
             }
-            
+
             setTerminalOutput(prev => [...prev, '✓ Installation complete!'])
             console.log('Installation complete. Starting server...')
-            
+
             if (runProcess) {
                 runProcess.kill()
             }
-            
+
             const tempRunProcess = await webContainer.spawn("npm", ["run", "dev"])
             tempRunProcess.output.pipeTo(new WritableStream({
                 write(chunk) {
@@ -335,14 +651,14 @@ const Project = () => {
                     setTerminalOutput(prev => [...prev, chunk])
                 }
             }))
-            
+
             setRunProcess(tempRunProcess)
             webContainer.on('server-ready', (port, url) => {
                 console.log(port, url)
                 setIframeUrl(url)
                 setTerminalOutput(prev => [...prev, `✓ Server running on ${url}`])
             })
-            
+
         } catch (error) {
             console.error('Error running project:', error)
             console.error('Original fileTree:', fileTree)
@@ -382,31 +698,80 @@ const Project = () => {
     // Safe file icon getter function
     const getFileIcon = (fileName) => {
         if (!fileName || typeof fileName !== 'string') return 'ri-file-text-fill';
-        
-        if (fileName.endsWith('.js') || fileName.endsWith('.jsx')) return 'ri-file-js-fill';
-        if (fileName.endsWith('.html')) return 'ri-file-html-fill';
-        if (fileName.endsWith('.css')) return 'ri-file-css-fill';
-        if (fileName.endsWith('.json')) return 'ri-file-code-fill';
-        if (fileName.endsWith('.md')) return 'ri-markdown-fill';
-        if (fileName.endsWith('.txt')) return 'ri-file-text-fill';
-        if (fileName.endsWith('.py')) return 'ri-file-code-fill';
-        if (fileName.endsWith('.java')) return 'ri-file-code-fill';
-        if (fileName.endsWith('.cpp') || fileName.endsWith('.c')) return 'ri-file-code-fill';
-        
-        return 'ri-file-text-fill';
+
+        const ext = fileName.split('.').pop()?.toLowerCase()
+        const iconMap = {
+            'js': 'ri-file-js-fill',
+            'jsx': 'ri-file-js-fill',
+            'ts': 'ri-file-code-fill',
+            'tsx': 'ri-file-code-fill',
+            'html': 'ri-file-html-fill',
+            'css': 'ri-file-css-fill',
+            'json': 'ri-file-code-fill',
+            'md': 'ri-markdown-fill',
+            'txt': 'ri-file-text-fill',
+            'py': 'ri-file-code-fill',
+            'java': 'ri-file-code-fill',
+            'cpp': 'ri-file-code-fill',
+            'c': 'ri-file-code-fill',
+            'php': 'ri-file-code-fill',
+            'rb': 'ri-file-code-fill',
+            'xml': 'ri-file-code-fill',
+            'yaml': 'ri-file-code-fill',
+            'yml': 'ri-file-code-fill',
+            'png': 'ri-image-fill',
+            'jpg': 'ri-image-fill',
+            'jpeg': 'ri-image-fill',
+            'gif': 'ri-image-fill',
+            'svg': 'ri-image-fill',
+            'ico': 'ri-image-fill'
+        }
+
+        return iconMap[ext] || 'ri-file-text-fill'
     }
 
     const getFileIconColor = (fileName) => {
-        if (!fileName || typeof fileName !== 'string') return 'text-yellow-400';
-        
-        if (fileName.endsWith('.js') || fileName.endsWith('.jsx')) return 'text-yellow-400';
-        if (fileName.endsWith('.html')) return 'text-orange-500';
-        if (fileName.endsWith('.css')) return 'text-blue-400';
-        if (fileName.endsWith('.json')) return 'text-yellow-300';
-        if (fileName.endsWith('.md')) return 'text-blue-300';
-        if (fileName.endsWith('.txt')) return 'text-gray-400';
-        
-        return 'text-gray-400';
+        if (!fileName || typeof fileName !== 'string') return 'text-gray-400';
+
+        const ext = fileName.split('.').pop()?.toLowerCase()
+        const colorMap = {
+            'js': 'text-yellow-400',
+            'jsx': 'text-yellow-400',
+            'ts': 'text-blue-400',
+            'tsx': 'text-blue-400',
+            'html': 'text-orange-500',
+            'css': 'text-blue-400',
+            'json': 'text-yellow-300',
+            'md': 'text-blue-300',
+            'py': 'text-green-400',
+            'java': 'text-red-400',
+            'cpp': 'text-pink-400',
+            'c': 'text-pink-400',
+            'php': 'text-purple-400',
+            'png': 'text-green-300',
+            'jpg': 'text-green-300',
+            'jpeg': 'text-green-300',
+            'gif': 'text-green-300',
+            'svg': 'text-orange-300'
+        }
+
+        return colorMap[ext] || 'text-gray-400'
+    }
+
+    // Handle content update from FileContentDisplay
+    const handleContentUpdate = (newContent) => {
+        if (currentFile) {
+            const updatedFileTree = {
+                ...fileTree,
+                [currentFile]: {
+                    file: {
+                        contents: newContent
+                    }
+                }
+            }
+            setFileTree(updatedFileTree)
+            saveFileTree(updatedFileTree)
+        }
     }
 
     return (
@@ -514,8 +879,11 @@ const Project = () => {
             <section className="right flex-grow h-full flex bg-gray-900 min-w-0">
                 {/* File Explorer */}
                 <div className="explorer h-full w-64 min-w-64 bg-gray-800 border-r border-gray-700 flex flex-col">
-                    <div className="p-4 border-b border-gray-700">
+                    <div className="p-4 border-b border-gray-700 flex justify-between items-center">
                         <h2 className="font-semibold text-gray-200 text-lg">Project Files</h2>
+                        <span className="text-xs text-gray-400 bg-gray-700 px-2 py-1 rounded">
+                            {Object.keys(fileTree).length} files
+                        </span>
                     </div>
                     <div className="file-tree flex-1 overflow-auto">
                         {Object.keys(fileTree).length === 0 ? (
@@ -524,21 +892,30 @@ const Project = () => {
                                 <p className="text-sm">No files yet</p>
                             </div>
                         ) : (
-                            Object.keys(fileTree).map((file, index) => (
-                                <button
-                                    key={index}
-                                    onClick={() => {
-                                        setCurrentFile(file)
-                                        setOpenFiles(prev => [...new Set([...prev, file])])
-                                    }}
-                                    className={`tree-element cursor-pointer p-3 px-4 flex items-center gap-3 w-full hover:bg-gray-700 transition-colors ${currentFile === file ? 'bg-gray-700 border-r-2 border-blue-500' : ''}`}
-                                >
-                                    <i className={`${getFileIcon(file)} ${getFileIconColor(file)}`}></i>
-                                    <p className="font-medium text-gray-200 truncate text-sm">
-                                        {file || 'Unnamed File'}
-                                    </p>
-                                </button>
-                            ))
+                            <div className="py-2">
+                                {Object.keys(fileTree).map((file, index) => (
+                                    <button
+                                        key={index}
+                                        onClick={() => {
+                                            setCurrentFile(file)
+                                            if (!openFiles.includes(file)) {
+                                                setOpenFiles(prev => [...prev, file])
+                                            }
+                                        }}
+                                        className={`tree-element cursor-pointer p-3 px-4 flex items-center gap-3 w-full hover:bg-gray-700 transition-colors ${currentFile === file ? 'bg-gray-700 border-r-2 border-blue-500' : ''}`}
+                                    >
+                                        <i className={`${getFileIcon(file)} ${getFileIconColor(file)}`}></i>
+                                        <div className="flex-1 min-w-0 text-left">
+                                            <p className="font-medium text-gray-200 truncate text-sm">
+                                                {file.split('/').pop() || 'Unnamed File'}
+                                            </p>
+                                            <p className="text-xs text-gray-500 truncate">
+                                                {file}
+                                            </p>
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
                         )}
                     </div>
                 </div>
@@ -556,7 +933,7 @@ const Project = () => {
                                 >
                                     <i className={`${getFileIcon(file)} ${getFileIconColor(file)}`}></i>
                                     <p className="font-medium text-sm truncate max-w-32">
-                                        {file || 'Unnamed File'}
+                                        {file.split('/').pop() || 'Unnamed File'}
                                     </p>
                                     <div
                                         onClick={(e) => {
@@ -594,57 +971,60 @@ const Project = () => {
                                 </button>
                             )}
                         </div>
+                        <div className="actions flex gap-2 p-3">
+                            {isRunning ? (
+                                <button
+                                    onClick={stopProject}
+                                    className="px-4 py-2 rounded-lg font-medium transition-all bg-red-600 hover:bg-red-500 text-white flex items-center gap-2"
+                                >
+                                    <i className="ri-stop-fill"></i>
+                                    Stop
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={runProject}
+                                    disabled={!webContainer}
+                                    className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${webContainer ? 'bg-green-600 hover:bg-green-500 text-white' : 'bg-gray-700 text-gray-500 cursor-not-allowed'}`}
+                                >
+                                    <i className="ri-play-fill"></i>
+                                    {webContainer ? 'Run' : 'Initializing...'}
+                                </button>
+                            )}
+
+                            {/* ADD THIS DEPLOY BUTTON */}
+                            <button
+                                onClick={handleDeploy}
+                                disabled={isDeploying || Object.keys(fileTree).length === 0}
+                                className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${!isDeploying && Object.keys(fileTree).length > 0 ? 'bg-blue-600 hover:bg-blue-500 text-white' : 'bg-gray-700 text-gray-500 cursor-not-allowed'}`}
+                            >
+                                <i className={isDeploying ? "ri-loader-4-line animate-spin" : "ri-rocket-2-fill"}></i>
+                                {isDeploying ? 'Deploying...' : 'Deploy'}
+                            </button>
+                        </div>
                     </div>
 
                     {/* Code Editor */}
                     <div className="bottom flex-grow min-h-0 bg-gray-900 flex">
-                        {fileTree[currentFile]?.file?.contents && (
-                            <div className="code-editor-area h-full flex-1 overflow-auto bg-gray-900">
-                                <pre className="hljs h-full m-0">
-                                    <code
-                                        className="hljs h-full outline-none text-sm font-mono leading-relaxed p-6 text-gray-200"
-                                        contentEditable
-                                        suppressContentEditableWarning
-                                        onBlur={(e) => {
-                                            const updatedContent = e.target.innerText
-                                            const ft = {
-                                                ...fileTree,
-                                                [currentFile]: {
-                                                    file: {
-                                                        contents: updatedContent
-                                                    }
-                                                }
-                                            }
-                                            setFileTree(ft)
-                                            saveFileTree(ft)
-                                        }}
-                                        dangerouslySetInnerHTML={{ __html: hljs.highlight(fileTree[currentFile].file.contents, { language: 'javascript' }).value }}
-                                        style={{
-                                            whiteSpace: 'pre-wrap',
-                                            counterSet: 'line-numbering',
-                                            backgroundColor: '#111827',
-                                        }}
-                                    />
-                                </pre>
-                            </div>
-                        )}
-                        {!currentFile && (
-                            <div className="h-full flex-1 flex items-center justify-center text-gray-500 bg-gray-900">
-                                <div className="text-center">
-                                    <i className="ri-file-code-line text-6xl mb-4 text-gray-600"></i>
-                                    <p className="text-lg text-gray-400">Select a file to start editing</p>
-                                </div>
-                            </div>
-                        )}
+                        <FileContentDisplay
+                            fileTree={fileTree}
+                            currentFile={currentFile}
+                            onContentUpdate={handleContentUpdate}
+                        />
 
                         {/* Terminal Output */}
                         <div className="terminal w-80 min-w-80 bg-black border-l border-gray-800 flex flex-col">
-                            <div className="terminal-header bg-gray-800 text-gray-200 px-4 py-2 border-b border-gray-700">
+                            <div className="terminal-header bg-gray-800 text-gray-200 px-4 py-2 border-b border-gray-700 flex justify-between items-center">
                                 <h3 className="font-semibold text-sm">Terminal</h3>
+                                <button
+                                    onClick={() => setTerminalOutput([])}
+                                    className="text-xs text-gray-400 hover:text-gray-200"
+                                >
+                                    Clear
+                                </button>
                             </div>
                             <div className="terminal-output flex-1 overflow-auto p-4 font-mono text-sm text-green-400 bg-gray-900">
                                 {terminalOutput.map((line, index) => (
-                                    <div key={index} className="mb-1">
+                                    <div key={index} className="mb-1 whitespace-pre-wrap">
                                         {line}
                                     </div>
                                 ))}
@@ -686,6 +1066,73 @@ const Project = () => {
             </section>
 
             {/* Add Collaborator Modal */}
+            {isDeployModalOpen && (
+                <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
+                    <div className="bg-gray-800 rounded-xl w-full max-w-md shadow-2xl border border-gray-700">
+                        <header className="flex justify-between items-center p-6 border-b border-gray-700">
+                            <h2 className="text-xl font-semibold text-gray-200 flex items-center gap-2">
+                                <i className="ri-rocket-2-fill text-blue-400"></i>
+                                Deploying to Vercel
+                            </h2>
+                            <button
+                                onClick={() => {
+                                    if (!isDeploying) {
+                                        setIsDeployModalOpen(false)
+                                        setDeploymentStatus('')
+                                    }
+                                }}
+                                disabled={isDeploying}
+                                className="p-2 hover:bg-gray-700 rounded-lg transition-colors text-gray-400 hover:text-gray-200 disabled:opacity-50"
+                            >
+                                <i className="ri-close-fill text-xl"></i>
+                            </button>
+                        </header>
+
+                        <div className="p-6">
+                            <div className="mb-4">
+                                <p className="text-gray-300 text-sm mb-2">Status:</p>
+                                <div className="bg-gray-900 rounded-lg p-4 flex items-center gap-3">
+                                    {isDeploying && (
+                                        <i className="ri-loader-4-line animate-spin text-blue-400 text-xl"></i>
+                                    )}
+                                    <p className="text-gray-200">{deploymentStatus || 'Initializing...'}</p>
+                                </div>
+                            </div>
+
+                            {deploymentUrl && !isDeploying && (
+                                <div>
+                                    <p className="text-gray-300 text-sm mb-2">Deployment URL:</p>
+                                    <div className="bg-gray-900 rounded-lg p-4">
+                                        <a
+                                            href={deploymentUrl}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-blue-400 hover:text-blue-300 break-all flex items-center gap-2"
+                                        >
+                                            {deploymentUrl}
+                                            <i className="ri-external-link-line"></i>
+                                        </a>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="p-6 border-t border-gray-700">
+                            <button
+                                onClick={() => {
+                                    setIsDeployModalOpen(false)
+                                    setDeploymentStatus('')
+                                    setDeploymentUrl('')
+                                }}
+                                disabled={isDeploying}
+                                className={`w-full py-3 px-4 rounded-lg font-semibold transition-all ${!isDeploying ? 'bg-gray-700 hover:bg-gray-600 text-white' : 'bg-gray-700 text-gray-500 cursor-not-allowed'}`}
+                            >
+                                {isDeploying ? 'Deploying...' : 'Close'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
             {isModalOpen && (
                 <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
                     <div className="bg-gray-800 rounded-xl w-full max-w-md shadow-2xl border border-gray-700">

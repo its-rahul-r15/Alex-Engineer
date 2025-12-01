@@ -6,6 +6,7 @@ import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import aiRoutes from './routes/ai.routes.js';
 import projectRoutes from './routes/project.routes.js';
+import deployRoutes from './routes/deploy.routes.js';
 connectDB();
 const app = express();
 
@@ -18,7 +19,8 @@ app.use(cookieParser());
 app.use('/users', userRouter);
 app.use('/projects', projectRoutes);
 app.use('/ai', aiRoutes);
-app.get('/', (req,res)=> {
+app.use('/deploy', deployRoutes);
+app.get('/', (req, res) => {
     res.send('Hello World!')
 })
 

@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+
 const userSchema = new mongoose.Schema({
     email: {
         type: String,
@@ -8,8 +9,8 @@ const userSchema = new mongoose.Schema({
         unique: true,
         trim: true,
         lowercase: true,
-        minLength:[6, 'Email must be at least 6 characters long'],
-        maxLength:[50, 'Email must be at most 50 characters long'],
+        minLength: [6, 'Email must be at least 6 characters long'],
+        maxLength: [50, 'Email must be at most 50 characters long'],
     },
 
     password: {
@@ -21,15 +22,17 @@ const userSchema = new mongoose.Schema({
 
 userSchema.statics.hashPassword = async function (password) {
     return await bcrypt.hash(password, 10);
-    
 }
 
-userSchema.methods.isValidPassword = async function (password){
+userSchema.methods.isValidPassword = async function (password) {
     return await bcrypt.compare(password, this.password);
 }
 
-userSchema.methods.generateJWT = function(){
-    return jwt.sign({email: this.email}, process.env.JWT_SECRET, {expiresIn: '7d'});
+userSchema.methods.generateJWT = function () {
+    return jwt.sign({
+        email: this.email,
+        _id: this._id
+    }, process.env.JWT_SECRET, { expiresIn: '7d' });
 }
 
 const User = mongoose.model('user', userSchema);

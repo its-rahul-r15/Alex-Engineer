@@ -53,6 +53,7 @@ const Home = () => {
                     </div>
                     <div className='flex items-center gap-4'>
                         <span className='text-gray-300'>Welcome, {user?.email}</span>
+                       
                     </div>
                 </div>
 
