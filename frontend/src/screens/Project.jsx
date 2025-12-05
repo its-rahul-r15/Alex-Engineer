@@ -451,9 +451,12 @@ const Project = () => {
                         const convertedTree = convertToWebContainerFormat(parsed.fileTree)
                         webContainer.mount(convertedTree);
                     }
-                    if (parsed.fileTree) {
-                        setFileTree(parsed.fileTree);
-                        saveFileTree(parsed.fileTree);
+                    if (parsed.fileTree && Object.keys(parsed.fileTree).length > 0) {
+                        setFileTree(prevFileTree => {
+                            const mergedFileTree = { ...prevFileTree, ...parsed.fileTree };
+                            saveFileTree(mergedFileTree);
+                            return mergedFileTree;
+                        });
                     }
                 } catch (err) {
                     console.error('Error parsing AI message:', err);
@@ -763,17 +766,18 @@ const Project = () => {
         if (currentFile) {
             const updatedFileTree = {
                 ...fileTree,
-                [currentFile]: {
-                    file: {
-                        contents: newContent
-                    }
-                }
+                [currentFile]: { file: { contents: newContent } }
             }
             setFileTree(updatedFileTree)
-            saveFileTree(updatedFileTree)
+
+            // Auto-save with 2 second debounce
+            if (window.autoSaveTimeout) clearTimeout(window.autoSaveTimeout)
+            window.autoSaveTimeout = setTimeout(() => {
+                saveFileTree(updatedFileTree)
+                console.log('✅ Auto-saved:', currentFile)
+            }, 2000)
         }
     }
-
     return (
         <main className="h-screen w-screen flex bg-gray-900 overflow-hidden">
             {/* Left Panel - Chat */}
