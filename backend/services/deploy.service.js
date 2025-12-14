@@ -4,18 +4,26 @@ import Deployment from '../models/deployment.model.js';
 const VERCEL_TOKEN = process.env.VERCEL_TOKEN;
 const VERCEL_API_URL = 'https://api.vercel.com';
 
-// Validate if project is a React/Vite project
-export const validateReactProject = (fileTree) => {
+// Detect project type (vanilla HTML/CSS/JS or React/Vite)
+export const detectProjectType = (fileTree) => {
     const files = Object.keys(fileTree);
 
-    const hasViteConfig = files.some(file => file.includes('vite.config.js') || file.includes('vite.config.ts'));
+    const hasIndexHtml = files.some(file => file === 'index.html' || file.endsWith('/index.html'));
     const hasPackageJson = files.some(file => file.includes('package.json'));
+    const hasViteConfig = files.some(file => file.includes('vite.config.js') || file.includes('vite.config.ts'));
 
-    if (!hasViteConfig || !hasPackageJson) {
-        throw new Error('This is not a valid React/Vite project. Required files: vite.config.js and package.json');
+    // Vanilla project: has index.html but no package.json
+    if (hasIndexHtml && !hasPackageJson) {
+        return 'vanilla';
     }
 
-    return true;
+    // React/Vite project: has package.json and vite.config.js
+    if (hasPackageJson && hasViteConfig) {
+        return 'react';
+    }
+
+    // Unknown or invalid project
+    throw new Error('Unable to detect project type. Please ensure you have either: (1) index.html for vanilla projects, or (2) package.json + vite.config.js for React projects');
 };
 
 // Format files for Vercel deployment
@@ -43,20 +51,37 @@ export const formatFilesForVercel = (fileTree) => {
 };
 
 // Deploy to Vercel
-export const deployToVercel = async (projectName, fileTree) => {
+export const deployToVercel = async (projectName, fileTree, projectType = 'react') => {
     try {
         const files = formatFilesForVercel(fileTree);
 
-        const deploymentPayload = {
-            name: projectName,
-            files: files,
-            projectSettings: {
-                framework: 'vite',
-                buildCommand: 'npm run build',
-                outputDirectory: 'dist',
-                installCommand: 'npm install'
-            }
-        };
+        // Build deployment payload based on project type
+        let deploymentPayload;
+
+        if (projectType === 'vanilla') {
+            // Vanilla HTML/CSS/JS - no build configuration needed
+            // Don't send projectSettings at all for vanilla projects
+            deploymentPayload = {
+                name: projectName,
+                files: files
+            };
+            console.log('📦 Deploying vanilla project (no build steps)');
+        } else {
+            // React/Vite - needs build configuration
+            deploymentPayload = {
+                name: projectName,
+                files: files,
+                projectSettings: {
+                    framework: 'vite',
+                    buildCommand: 'npm run build',
+                    outputDirectory: 'dist',
+                    installCommand: 'npm install'
+                }
+            };
+            console.log('📦 Deploying React/Vite project with build steps');
+        }
+
+        console.log('📤 Deployment payload:', JSON.stringify(deploymentPayload, null, 2));
 
         const response = await axios.post(
             `${VERCEL_API_URL}/v13/deployments`,

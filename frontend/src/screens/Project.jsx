@@ -8,6 +8,7 @@ import 'highlight.js/styles/github-dark.css';
 import { getWebContainer } from '../config/webContainer.js'
 import { initializeSocket, sendMessage } from '../config/socket.js'
 
+
 function SyntaxHighlightedCode(props) {
     const ref = useRef(null)
 
@@ -270,6 +271,7 @@ const Project = () => {
     const [selectedUserId, setSelectedUserId] = useState(new Set())
     const [project, setProject] = useState(location.state?.project?.[0] || {})
     const [message, setMessage] = useState('')
+    const [isReactMode, setIsReactMode] = useState(true)  // ← MOVED HERE
     const { user } = useContext(UserContext)
     const messageBox = useRef(null)
 
@@ -302,9 +304,13 @@ const Project = () => {
 
     const send = () => {
         if (message.trim() === '') return
+
+        console.log('Sending message with mode:', isReactMode ? 'react' : 'vanilla'); // ← ADD THIS
+
         sendMessage('project-message', {
             message,
-            sender: user
+            sender: user,
+            mode: isReactMode ? 'react' : 'vanilla'
         })
         setMessage("")
     }
@@ -377,22 +383,42 @@ const Project = () => {
     function WriteAiMessage(message) {
         try {
             const messageObject = JSON.parse(message)
+
+            // Count files in fileTree if present
+            const fileCount = messageObject.fileTree ? Object.keys(messageObject.fileTree).length : 0;
+
             return (
-                <div className='overflow-auto bg-gradient-to-r from-gray-800 to-gray-900 text-gray-200 rounded-lg p-3 border border-gray-700'>
-                    <Markdown
-                        children={messageObject.text}
-                        options={{
-                            overrides: {
-                                code: SyntaxHighlightedCode,
-                            },
-                        }}
-                    />
+                <div className='overflow-auto bg-gradient-to-r from-gray-800 to-gray-900 text-gray-200 rounded-lg p-4 border border-gray-700'>
+                    <div className="flex items-start gap-3 mb-3">
+                        <i className="ri-sparkling-fill text-blue-400 text-xl"></i>
+                        <div className="flex-1">
+                            <Markdown
+                                children={messageObject.text}
+                                options={{
+                                    overrides: {
+                                        code: SyntaxHighlightedCode,
+                                    },
+                                }}
+                            />
+                        </div>
+                    </div>
+
+                    {fileCount > 0 && (
+                        <div className="mt-3 pt-3 border-t border-gray-600">
+                            <div className="flex items-center gap-2 text-sm text-green-400">
+                                <i className="ri-file-code-line"></i>
+                                <span>Generated {fileCount} file{fileCount !== 1 ? 's' : ''}</span>
+                                <i className="ri-check-line"></i>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )
         } catch (err) {
+            console.error('Failed to parse AI message:', err);
             return (
                 <div className='overflow-auto bg-gradient-to-r from-gray-800 to-gray-900 text-gray-200 rounded-lg p-3 border border-gray-700'>
-                    <p>{message}</p>
+                    <p className="text-gray-400 text-sm">Error displaying AI response</p>
                 </div>
             )
         }
@@ -444,14 +470,21 @@ const Project = () => {
         const socket = initializeSocket(projectId);
 
         const handleMessage = (data) => {
+            console.log('📨 Message received:', { sender: data.sender._id, messageLength: data.message?.length });
+
             if (data.sender._id === 'ai') {
+                console.log('🤖 AI message detected, parsing...');
                 try {
                     const parsed = JSON.parse(data.message);
+                    console.log('✅ AI message parsed:', { hasText: !!parsed.text, hasFileTree: !!parsed.fileTree });
+
                     if (webContainer && parsed.fileTree && Object.keys(parsed.fileTree).length > 0) {
+                        console.log('🔧 Mounting to WebContainer...');
                         const convertedTree = convertToWebContainerFormat(parsed.fileTree)
                         webContainer.mount(convertedTree);
                     }
                     if (parsed.fileTree && Object.keys(parsed.fileTree).length > 0) {
+                        console.log('💾 Updating fileTree state with', Object.keys(parsed.fileTree).length, 'files');
                         setFileTree(prevFileTree => {
                             const mergedFileTree = { ...prevFileTree, ...parsed.fileTree };
                             saveFileTree(mergedFileTree);
@@ -459,8 +492,10 @@ const Project = () => {
                         });
                     }
                 } catch (err) {
-                    console.error('Error parsing AI message:', err);
+                    console.error('❌ Error parsing AI message:', err);
+                    console.error('Message preview:', data.message?.substring(0, 200));
                 }
+                console.log('➕ Adding AI message to messages array');
                 setMessages(prev => [...prev, data]);
                 return;
             }
@@ -598,6 +633,16 @@ const Project = () => {
         return () => document.removeEventListener('fullscreenchange', onFullScreenChange)
     }, [])
 
+
+
+    // Helper function to detect vanilla HTML/CSS/JS projects
+    const isVanillaProject = (fileTree) => {
+        const files = Object.keys(fileTree);
+        const hasIndexHtml = files.some(f => f === 'index.html' || f.endsWith('/index.html'));
+        const hasPackageJson = files.some(f => f.includes('package.json'));
+        return hasIndexHtml && !hasPackageJson;
+    };
+
     const runProject = async () => {
         if (!webContainer) {
             alert('WebContainer is still initializing. Please wait...')
@@ -607,61 +652,89 @@ const Project = () => {
             alert('No files in project. Please add files from AI or upload files first.')
             return
         }
-
         try {
             setIsRunning(true)
-            setTerminalOutput(prev => [...prev, '$ npm install && npm run dev', 'Starting installation...'])
-
-            console.log('Original fileTree sample:', Object.entries(fileTree).slice(0, 2).map(([k, v]) => [k, v]))
             const convertedTree = convertToWebContainerFormat(fileTree)
-            console.log('Converted fileTree sample:', Object.entries(convertedTree).slice(0, 2).map(([k, v]) => [k, v]))
-            console.log('Full converted tree:', convertedTree)
 
-            await webContainer.mount(convertedTree)
-            console.log('Files mounted successfully!')
-            setTerminalOutput(prev => [...prev, '✓ Files mounted successfully!'])
+            // Detect project type
+            const isVanilla = isVanillaProject(fileTree);
+            console.log('🔍 Project type:', isVanilla ? 'Vanilla HTML/CSS/JS' : 'React/Vite');
+            if (isVanilla) {
+                // ========================================
+                // VANILLA HTML/CSS/JS PROJECT
+                // ========================================
+                setTerminalOutput(prev => [...prev, '🌐 Starting vanilla HTML/CSS/JS project...'])
 
-            console.log('Installing dependencies...')
-            setTerminalOutput(prev => [...prev, 'Installing dependencies...'])
+                await webContainer.mount(convertedTree)
+                console.log('Files mounted successfully!')
+                setTerminalOutput(prev => [...prev, '✓ Files mounted successfully!'])
+                // Start a simple HTTP server for vanilla projects
+                setTerminalOutput(prev => [...prev, '🚀 Starting HTTP server...'])
 
-            const installProcess = await webContainer.spawn("npm", ["install"])
-            installProcess.output.pipeTo(new WritableStream({
-                write(chunk) {
-                    console.log(chunk)
-                    setTerminalOutput(prev => [...prev, chunk])
+                // Use WebContainer's built-in server
+                webContainer.on('server-ready', (port, url) => {
+                    console.log('Server ready:', port, url)
+                    setIframeUrl(url)
+                    setTerminalOutput(prev => [...prev, `✓ Server running on ${url}`])
+                })
+                // For vanilla projects, we can directly access index.html
+                // WebContainer automatically serves files
+                const indexUrl = await webContainer.spawn('npx', ['-y', 'http-server', '-p', '3000', '-c-1'])
+
+                indexUrl.output.pipeTo(new WritableStream({
+                    write(chunk) {
+                        console.log(chunk)
+                        setTerminalOutput(prev => [...prev, chunk])
+                    }
+                }))
+                setRunProcess(indexUrl)
+
+            } else {
+                // ========================================
+                // REACT/VITE PROJECT (existing flow)
+                // ========================================
+                setTerminalOutput(prev => [...prev, '$ npm install && npm run dev', 'Starting installation...'])
+                console.log('Original fileTree sample:', Object.entries(fileTree).slice(0, 2).map(([k, v]) => [k, v]))
+                console.log('Converted fileTree sample:', Object.entries(convertedTree).slice(0, 2).map(([k, v]) => [k, v]))
+                console.log('Full converted tree:', convertedTree)
+                await webContainer.mount(convertedTree)
+                console.log('Files mounted successfully!')
+                setTerminalOutput(prev => [...prev, '✓ Files mounted successfully!'])
+                console.log('Installing dependencies...')
+                setTerminalOutput(prev => [...prev, 'Installing dependencies...'])
+                const installProcess = await webContainer.spawn("npm", ["install"])
+                installProcess.output.pipeTo(new WritableStream({
+                    write(chunk) {
+                        console.log(chunk)
+                        setTerminalOutput(prev => [...prev, chunk])
+                    }
+                }))
+                const installExitCode = await installProcess.exit
+                if (installExitCode !== 0) {
+                    setTerminalOutput(prev => [...prev, '❌ Installation failed!'])
+                    alert('Installation failed. Check console for details.')
+                    setIsRunning(false)
+                    return
                 }
-            }))
-
-            const installExitCode = await installProcess.exit
-            if (installExitCode !== 0) {
-                setTerminalOutput(prev => [...prev, '❌ Installation failed!'])
-                alert('Installation failed. Check console for details.')
-                setIsRunning(false)
-                return
-            }
-
-            setTerminalOutput(prev => [...prev, '✓ Installation complete!'])
-            console.log('Installation complete. Starting server...')
-
-            if (runProcess) {
-                runProcess.kill()
-            }
-
-            const tempRunProcess = await webContainer.spawn("npm", ["run", "dev"])
-            tempRunProcess.output.pipeTo(new WritableStream({
-                write(chunk) {
-                    console.log(chunk)
-                    setTerminalOutput(prev => [...prev, chunk])
+                setTerminalOutput(prev => [...prev, '✓ Installation complete!'])
+                console.log('Installation complete. Starting server...')
+                if (runProcess) {
+                    runProcess.kill()
                 }
-            }))
-
-            setRunProcess(tempRunProcess)
-            webContainer.on('server-ready', (port, url) => {
-                console.log(port, url)
-                setIframeUrl(url)
-                setTerminalOutput(prev => [...prev, `✓ Server running on ${url}`])
-            })
-
+                const tempRunProcess = await webContainer.spawn("npm", ["run", "dev"])
+                tempRunProcess.output.pipeTo(new WritableStream({
+                    write(chunk) {
+                        console.log(chunk)
+                        setTerminalOutput(prev => [...prev, chunk])
+                    }
+                }))
+                setRunProcess(tempRunProcess)
+                webContainer.on('server-ready', (port, url) => {
+                    console.log(port, url)
+                    setIframeUrl(url)
+                    setTerminalOutput(prev => [...prev, `✓ Server running on ${url}`])
+                })
+            }
         } catch (error) {
             console.error('Error running project:', error)
             console.error('Original fileTree:', fileTree)
@@ -670,7 +743,6 @@ const Project = () => {
             setIsRunning(false)
         }
     }
-
     const stopProject = () => {
         if (runProcess) {
             runProcess.kill()
@@ -822,6 +894,7 @@ const Project = () => {
 
                     <div className="inputField w-full flex p-4 bg-gray-800 border-t border-gray-700">
                         <div className="flex gap-2 w-full bg-gray-700 rounded-xl p-1">
+
                             <input
                                 value={message}
                                 onChange={(e) => setMessage(e.target.value)}
@@ -956,6 +1029,18 @@ const Project = () => {
                         </div>
 
                         <div className="actions flex gap-2 p-3">
+                            <button
+                                onClick={() => setIsReactMode(!isReactMode)}
+                                className={`px-3 py-2 rounded-lg font-medium text-sm transition-all flex items-center gap-2 ${isReactMode
+                                    ? 'bg-blue-600 text-white'
+                                    : 'bg-gray-700 text-gray-300'
+                                    }`}
+                                title={isReactMode ? 'React Mode' : 'Vanilla JS Mode'}
+                            >
+                                {isReactMode ? '⚛️' : '📄'}
+                                <span className="hidden md:inline">{isReactMode ? 'React' : 'Vanilla'}</span>
+                            </button>
+
                             {isRunning ? (
                                 <button
                                     onClick={stopProject}

@@ -31,15 +31,17 @@ export const startDeployment = async (req, res) => {
             return res.status(404).json({ error: 'Project not found' });
         }
 
-        // Validate React project
+        // Detect project type (vanilla or react)
+        let projectType;
         try {
-            deployService.validateReactProject(project.fileTree);
+            projectType = deployService.detectProjectType(project.fileTree);
+            console.log(`📦 Detected project type: ${projectType}`);
         } catch (error) {
             return res.status(400).json({ error: error.message });
         }
 
         // Deploy to Vercel
-        const vercelDeployment = await deployService.deployToVercel(projectName, project.fileTree);
+        const vercelDeployment = await deployService.deployToVercel(projectName, project.fileTree, projectType);
 
         // Save deployment record
         const deployment = new Deployment({

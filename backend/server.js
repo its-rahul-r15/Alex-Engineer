@@ -16,6 +16,37 @@ const io = new Server(server, {
 });
 
 // ================================
+// HELPER FUNCTIONS
+// ================================
+function cleanJsonResponse(response) {
+    if (!response) return '{}';
+
+    let cleaned = response.trim();
+
+    // Remove markdown code blocks if present
+    const markdownJsonMatch = cleaned.match(/```json\s*([\s\S]*?)\s*```/);
+    if (markdownJsonMatch) {
+        cleaned = markdownJsonMatch[1].trim();
+    } else {
+        // Try removing any code block wrappers
+        const codeBlockMatch = cleaned.match(/```\s*([\s\S]*?)\s*```/);
+        if (codeBlockMatch) {
+            cleaned = codeBlockMatch[1].trim();
+        }
+    }
+
+    // Find the first '{' and last '}' to extract JSON
+    const firstBrace = cleaned.indexOf('{');
+    const lastBrace = cleaned.lastIndexOf('}');
+
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        cleaned = cleaned.substring(firstBrace, lastBrace + 1);
+    }
+
+    return cleaned;
+}
+
+// ================================
 // SOCKET AUTH MIDDLEWARE
 // ================================
 io.use(async (socket, next) => {
@@ -65,7 +96,8 @@ io.on('connection', (socket) => {
 
         socket.on('project-message', async (data) => {
             try {
-                const { message } = data;
+                const { message, mode = 'react' } = data;  // ← Extract mode
+                console.log('📩 Received message data:', { message, mode, fullData: data });
                 const aiRequested = message.includes('@ai');
 
                 // Broadcast user message
@@ -74,13 +106,27 @@ io.on('connection', (socket) => {
                 if (!aiRequested) return;
 
                 const prompt = message.replace('@ai', '').trim();
-                const aiResponse = await generateResult(prompt);
+                console.log('🤖 Calling AI with mode:', mode, 'prompt:', prompt.substring(0, 50));
+                const aiResponse = await generateResult(prompt, mode);  // ← Pass mode
+                console.log('✅ AI Response received, length:', aiResponse?.length);
+
+                // Clean JSON response (remove markdown, extra text, etc.)
+                const cleanedResponse = cleanJsonResponse(aiResponse);
+                console.log('🧹 Cleaned response preview:', cleanedResponse.substring(0, 200));
 
                 // Try JSON parse safely
                 let parsed = null;
                 try {
-                    parsed = JSON.parse(aiResponse);
-                } catch (_) { }
+                    parsed = JSON.parse(cleanedResponse);
+                    console.log('✅ JSON parsed successfully');
+                    console.log('📦 Parsed object keys:', Object.keys(parsed));
+                    if (parsed.fileTree) {
+                        console.log('📁 FileTree found with', Object.keys(parsed.fileTree).length, 'files');
+                    }
+                } catch (err) {
+                    console.error("❌ Failed to parse AI response after cleaning:", err.message);
+                    console.error("Cleaned response preview:", cleanedResponse.substring(0, 200));
+                }
 
                 if (parsed && parsed.fileTree) {
                     await projectModal.findByIdAndUpdate(
@@ -88,14 +134,16 @@ io.on('connection', (socket) => {
                         { fileTree: parsed.fileTree },
                         { new: true }
                     );
-                    console.log("FileTree saved");
+                    console.log("✅ FileTree saved to database");
                 }
 
-                // Emit AI response
+                // Emit AI response - send the cleaned JSON
+                console.log('📤 Emitting AI response to room:', socket.roomId);
                 io.to(socket.roomId).emit('project-message', {
-                    message: aiResponse,
+                    message: cleanedResponse,
                     sender: { _id: 'ai', email: 'AI Assistant' }
                 });
+                console.log('✅ AI response emitted successfully');
 
             } catch (error) {
                 console.log("Error in project-message:", error);

@@ -10,17 +10,22 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.4.2",
     "@tailwindcss/vite": "^4.1.17",
     "@webcontainer/api": "^1.6.1",
     "axios": "^1.13.2",
+    "framer-motion": "^12.23.26",
     "highlight.js": "^11.11.1",
     "markdown-to-jsx": "^9.2.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-icons": "^5.5.0",
     "react-router-dom": "^7.9.6",
     "remixicon": "^4.7.0",
     "socket.io-client": "^4.8.1",
-    "tailwindcss": "^4.1.17"
+    "tailwindcss": "^4.1.17",
+    "three": "^0.182.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
